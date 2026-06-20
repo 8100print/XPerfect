@@ -81,7 +81,7 @@ namespace XPerfect
             if (scrConductor.instance == null || scrController.instance == null)
                 return 0.0;
 
-            return scrConductor.instance.bpm * GCS.currentSpeedTrial;
+            return scrConductor.instance.bpm * GCS.currentSpeedTrial * ADOBase.controller.playerOne.planetarySystem.speed;
         }
 
         public static double GetConductorPitch()
@@ -163,7 +163,7 @@ namespace XPerfect
     [HarmonyPriority(Priority.High)]
     public static class HitMarginPatch
     {
-        static void Postfix(ref HitMargin __result, float hitangle, float refangle, bool isCW, float bpmTimesSpeed, float conductorPitch)
+        static void Postfix(ref HitMargin __result, float hitangle, float refangle, bool isCW, float bpmTimesSpeed, float conductorPitch, double marginScale = 1f)
         {
             try
             {

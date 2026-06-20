@@ -83,7 +83,7 @@ namespace XPerfect
         [HarmonyPatch(typeof(scrHitErrorMeter), "AddHit")]
         [HarmonyPriority(Priority.Normal)]
         [HarmonyPostfix]
-        public static void AddHitPostfix(scrHitErrorMeter __instance, float angleDiff, float marginScale = 1f, scrPlanet planet = null)
+        public static void AddHitPostfix(scrHitErrorMeter __instance, float angleDiff, float marginScale = 1f, scrPlanet planet = null, scrFloor hitFloor = null)
         {
             try
             {
@@ -166,7 +166,7 @@ namespace XPerfect
         public static class MeterTickColorPatch
         {
             [HarmonyPrefix]
-            public static bool Prefix(ref Color __result, float angle, float marginScale = 1f)
+            public static bool Prefix(ref Color __result, float angle, float marginScale = 1f, scrFloor hitFloor = null)
             {
                 try
                 {
