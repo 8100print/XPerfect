@@ -5,6 +5,7 @@ using UnityEngine.UI;
 using UnityModManagerNet;
 using System;
 using System.Collections;
+using System.Text;
 
 namespace XPerfect
 {
@@ -13,12 +14,20 @@ namespace XPerfect
         private static readonly Color32 PlusMinusColor = new Color32(96, 255, 78, 255);
         private static readonly Color32 XColor = new Color32(77, 204, 255, 255);
 
+        private static readonly string PlusMinusHex = ColorUtility.ToHtmlStringRGB(PlusMinusColor);
+        private static readonly string XColorHex = ColorUtility.ToHtmlStringRGB(XColor);
+
         private static string _cachedSpace = "";
         private static int _lastSpacing = -1;
+
+        private static Vector2 _lastAppliedPos = Vector2.zero;
+        private static int _lastAppliedFontSize = -1;
 
         private static GameObject _canvasObj;
         private static TMP_Text _text;
         private static TMP_FontAsset _cachedFont;
+
+        private static readonly StringBuilder _counterBuilder = new StringBuilder(128);
 
 
         public static void Create()
@@ -35,8 +44,8 @@ namespace XPerfect
             var scaler = _canvasObj.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(
-                Screen.currentResolution.width,
-                Screen.currentResolution.height
+                Screen.width,
+                Screen.height
             );
 
             _text = CreateLabel(_canvasObj);
@@ -113,7 +122,7 @@ namespace XPerfect
                 UnityModManager.Logger.Log($"[XPerfect] RDString.fontData error: {ex}");
             }
 
-            foreach (var t in UnityEngine.Object.FindObjectsOfType<TMP_Text>())
+            foreach (var t in UnityEngine.Object.FindObjectsByType<TMP_Text>(FindObjectsSortMode.None))
             {
                 if (t == null || t.font == null) continue;
                 if (ReferenceEquals(t, _text)) continue;
@@ -127,11 +136,18 @@ namespace XPerfect
         {
             if (_text == null) return;
 
-            _text.rectTransform.anchoredPosition = new Vector2(
-                Main.Settings.CounterX,
-                Main.Settings.CounterY
-            );
-            _text.fontSize = Main.Settings.CounterFontSize;
+            Vector2 pos = new Vector2(Main.Settings.CounterX, Main.Settings.CounterY);
+            if (pos != _lastAppliedPos)
+            {
+                _text.rectTransform.anchoredPosition = pos;
+                _lastAppliedPos = pos;
+            }
+
+            if (Main.Settings.CounterFontSize != _lastAppliedFontSize)
+            {
+                _text.fontSize = Main.Settings.CounterFontSize;
+                _lastAppliedFontSize = Main.Settings.CounterFontSize;
+            }
         }
 
         public static void Refresh()
@@ -149,14 +165,56 @@ namespace XPerfect
 
             string space = GetSpace();
 
-            _text.text =
-                $"{ColorText(AccuracyState.PlusPerfectCount.ToString(), PlusMinusColor)}" +
-                $"{space}" +
-                $"{ColorText(AccuracyState.XPerfectCount.ToString(), XColor)}" +
-                $"{space}" +
-                $"{ColorText(AccuracyState.MinusPerfectCount.ToString(), PlusMinusColor)}";
+            var sb = _counterBuilder;
+            sb.Length = 0;
+
+            sb.Append("<color=#");
+            sb.Append(PlusMinusHex);
+            sb.Append(">+");
+            AppendInt(sb, AccuracyState.PlusPerfectCount);
+            sb.Append("</color>");
+            sb.Append(space);
+            sb.Append("<color=#");
+            sb.Append(XColorHex);
+            sb.Append(">");
+            AppendInt(sb, AccuracyState.XPerfectCount);
+            sb.Append("</color>");
+            sb.Append(space);
+            sb.Append("<color=#");
+            sb.Append(PlusMinusHex);
+            sb.Append(">-");
+            AppendInt(sb, AccuracyState.MinusPerfectCount);
+            sb.Append("</color>");
+
+            _text.text = sb.ToString();
 
             ApplySettings();
+        }
+
+        private static void AppendInt(StringBuilder sb, int value)
+        {
+            if (value >= 1000)
+            {
+                sb.Append((char)('0' + (value / 1000) % 10));
+                sb.Append((char)('0' + (value / 100) % 10));
+                sb.Append((char)('0' + (value / 10) % 10));
+                sb.Append((char)('0' + value % 10));
+            }
+            else if (value >= 100)
+            {
+                sb.Append((char)('0' + (value / 100) % 10));
+                sb.Append((char)('0' + (value / 10) % 10));
+                sb.Append((char)('0' + value % 10));
+            }
+            else if (value >= 10)
+            {
+                sb.Append((char)('0' + (value / 10) % 10));
+                sb.Append((char)('0' + value % 10));
+            }
+            else
+            {
+                sb.Append((char)('0' + value));
+            }
         }
 
         private static string GetSpace()
@@ -168,11 +226,6 @@ namespace XPerfect
                 _lastSpacing = s;
             }
             return _cachedSpace;
-        }
-
-        private static string ColorText(string text, Color32 color)
-        {
-            return $"<color=#{ColorUtility.ToHtmlStringRGB(color)}>{text}</color>";
         }
     }
 
@@ -218,16 +271,6 @@ namespace XPerfect
         }
     }
 
-    [HarmonyPatch(typeof(scrMarginTracker), "AddHit")]
-    public static class CounterRefreshOnHitPatch
-    {
-        static void Postfix()
-        {
-            try { CounterDisplay.Refresh(); }
-            catch (Exception ex) { UnityModManager.Logger.Log($"[XPerfect] CounterRefresh error: {ex}"); }
-        }
-    }
-
     [HarmonyPatch(typeof(scnEditor), "SwitchToEditMode")]
     public static class EditorSwitchToEditModePatch
     {
@@ -235,16 +278,6 @@ namespace XPerfect
         {
             try { CounterDisplay.Refresh(); }
             catch (Exception ex) { UnityModManager.Logger.Log($"[XPerfect] SwitchToEditMode error: {ex}"); }
-        }
-    }
-
-    [HarmonyPatch(typeof(scrController), "Start_Rewind")]
-    public static class CounterResetOnStartPatch
-    {
-        static void Postfix()
-        {
-            try { CounterDisplay.Refresh(); }
-            catch (Exception ex) { UnityModManager.Logger.Log($"[XPerfect] CounterReset error: {ex}"); }
         }
     }
 }

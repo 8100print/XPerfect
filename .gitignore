@@ -1,0 +1,17 @@
+# Build output
+bin/
+obj/
+
+# IDE
+.vs/
+.vscode/
+*.suo
+*.user
+*.csproj.user
+
+# Tools
+.codegraph/
+
+# OS
+.DS_Store
+Thumbs.db
