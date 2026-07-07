@@ -168,23 +168,42 @@ namespace XPerfect
             var sb = _counterBuilder;
             sb.Length = 0;
 
-            sb.Append("<color=#");
-            sb.Append(PlusMinusHex);
-            sb.Append(">+");
-            AppendInt(sb, AccuracyState.PlusPerfectCount);
-            sb.Append("</color>");
-            sb.Append(space);
-            sb.Append("<color=#");
-            sb.Append(XColorHex);
-            sb.Append(">");
-            AppendInt(sb, AccuracyState.XPerfectCount);
-            sb.Append("</color>");
-            sb.Append(space);
-            sb.Append("<color=#");
-            sb.Append(PlusMinusHex);
-            sb.Append(">-");
-            AppendInt(sb, AccuracyState.MinusPerfectCount);
-            sb.Append("</color>");
+            bool coop = scrController.coopMode;
+            int count = coop ? AccuracyState.PlayerCount : 1;
+
+            for (int p = 0; p < count; p++)
+            {
+                if (p > 0) sb.Append('\n');
+
+                if (coop)
+                {
+                    string col = GetPlayerColor(p);
+
+                    sb.Append("<color=#");
+                    sb.Append(col);
+                    sb.Append(">P");
+                    AppendInt(sb, p + 1);
+                    sb.Append("</color> ");
+                }
+
+                sb.Append("<color=#");
+                sb.Append(PlusMinusHex);
+                sb.Append(">+");
+                AppendInt(sb, coop ? AccuracyState.GetPlayerPlusPerfectCount(p) : AccuracyState.PlusPerfectCount);
+                sb.Append("</color>");
+                sb.Append(space);
+                sb.Append("<color=#");
+                sb.Append(XColorHex);
+                sb.Append(">");
+                AppendInt(sb, coop ? AccuracyState.GetPlayerXPerfectCount(p) : AccuracyState.XPerfectCount);
+                sb.Append("</color>");
+                sb.Append(space);
+                sb.Append("<color=#");
+                sb.Append(PlusMinusHex);
+                sb.Append(">-");
+                AppendInt(sb, coop ? AccuracyState.GetPlayerMinusPerfectCount(p) : AccuracyState.MinusPerfectCount);
+                sb.Append("</color>");
+            }
 
             _text.text = sb.ToString();
 
@@ -193,7 +212,15 @@ namespace XPerfect
 
         private static void AppendInt(StringBuilder sb, int value)
         {
-            if (value >= 1000)
+            if (value >= 10000)
+            {
+                sb.Append((char)('0' + (value / 10000) % 10));
+                sb.Append((char)('0' + (value / 1000) % 10));
+                sb.Append((char)('0' + (value / 100) % 10));
+                sb.Append((char)('0' + (value / 10) % 10));
+                sb.Append((char)('0' + value % 10));
+            }
+            else if (value >= 1000)
             {
                 sb.Append((char)('0' + (value / 1000) % 10));
                 sb.Append((char)('0' + (value / 100) % 10));
@@ -214,6 +241,28 @@ namespace XPerfect
             else
             {
                 sb.Append((char)('0' + value));
+            }
+        }
+
+        private static string GetPlayerColor(int player)
+        {
+            try
+            {
+                if (scrPlayerManager.playerColors != null && player < scrPlayerManager.playerColors.Length)
+                {
+                    var c = scrPlayerManager.playerColors[player].ToRealColor();
+                    return ColorUtility.ToHtmlStringRGB(c);
+                }
+            }
+            catch { }
+            // Fallback: game defaults (P1=CoopRed, P2=CoopBlue, P3=CoopYellow, P4=CoopGreen)
+            switch (player)
+            {
+                case 0: return "FF4444";
+                case 1: return "4488FF";
+                case 2: return "FFD700";
+                case 3: return "44DD44";
+                default: return "FFFFFF";
             }
         }
 

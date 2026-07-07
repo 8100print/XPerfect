@@ -26,8 +26,19 @@ namespace XPerfect
         private static Sprite straightSprite;
         private static Sprite curvedSprite;
 
-        private static Sprite originalStraightSprite;
-        private static Sprite originalCurvedSprite;
+        private static readonly System.Collections.Generic.Dictionary<int, (Sprite straight, Sprite curved)> _originalSprites =
+            new System.Collections.Generic.Dictionary<int, (Sprite straight, Sprite curved)>();
+
+        private static (Sprite straight, Sprite curved) GetOrCreateOriginalEntry(scrHitErrorMeter meter)
+        {
+            int key = meter.GetInstanceID();
+            if (!_originalSprites.TryGetValue(key, out var entry))
+            {
+                entry = (null, null);
+                _originalSprites[key] = entry;
+            }
+            return entry;
+        }
 
         [HarmonyPatch(typeof(scrHitErrorMeter), "UpdateLayout")]
         [HarmonyPostfix]
@@ -135,7 +146,7 @@ namespace XPerfect
             const float xCompress = 0.75f;
 
             double xPerfectMeterBoundary = AccuracyMath.GetMeterXPerfectBoundaryDeg(
-                bpmTimesSpeed, conductorPitch, countedBoundaryDeg);
+                bpmTimesSpeed, conductorPitch, countedBoundaryDeg, marginScale);
 
             if (Math.Abs(normalizedAngle) <= xPerfectMeterBoundary)
             {
@@ -179,31 +190,38 @@ namespace XPerfect
         {
             if (meter == null) return;
 
+            var entry = GetOrCreateOriginalEntry(meter);
+
             if (meter.straightMeter != null)
             {
                 Image image = meter.straightMeter.GetComponent<Image>();
                 if (image != null && image.sprite != straightSprite)
-                    originalStraightSprite = image.sprite;
+                    _originalSprites[meter.GetInstanceID()] = (straight: image.sprite, curved: entry.curved);
             }
 
             if (meter.curvedMeter != null)
             {
                 Image image = meter.curvedMeter.GetComponent<Image>();
                 if (image != null && image.sprite != curvedSprite)
-                    originalCurvedSprite = image.sprite;
+                {
+                    var current = _originalSprites[meter.GetInstanceID()];
+                    _originalSprites[meter.GetInstanceID()] = (straight: current.straight, curved: image.sprite);
+                }
             }
         }
 
         private static void RestoreOriginalSprites(scrHitErrorMeter meter)
         {
-            if (meter == null)
-                return;
+            if (meter == null) return;
 
-            if (meter.straightMeter != null && originalStraightSprite != null)
-                ReplaceRootImageOnly(meter.straightMeter, originalStraightSprite);
+            if (_originalSprites.TryGetValue(meter.GetInstanceID(), out var entry))
+            {
+                if (meter.straightMeter != null && entry.straight != null)
+                    ReplaceRootImageOnly(meter.straightMeter, entry.straight);
 
-            if (meter.curvedMeter != null && originalCurvedSprite != null)
-                ReplaceRootImageOnly(meter.curvedMeter, originalCurvedSprite);
+                if (meter.curvedMeter != null && entry.curved != null)
+                    ReplaceRootImageOnly(meter.curvedMeter, entry.curved);
+            }
         }
 
         private static float GetMeterAngleFromTick(Image tickImage, ErrorMeterShape meterShape)
@@ -275,36 +293,45 @@ namespace XPerfect
         {
             byte[] bytes = File.ReadAllBytes(filePath);
             Texture2D texture = new Texture2D(2, 2, TextureFormat.ARGB32, false);
-
-            var imageConversionType = Type.GetType("UnityEngine.ImageConversion, UnityEngine.ImageConversionModule");
-            if (imageConversionType == null)
+            bool adopted = false;
+            try
             {
-                UnityModManager.Logger.Log("[MeterVisualPatch] ImageConversion type not found");
-                return null;
+                var imageConversionType = Type.GetType("UnityEngine.ImageConversion, UnityEngine.ImageConversionModule");
+                if (imageConversionType == null)
+                {
+                    UnityModManager.Logger.Log("[MeterVisualPatch] ImageConversion type not found");
+                    return null;
+                }
+                var loadImage = imageConversionType.GetMethod(
+                    "LoadImage",
+                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public,
+                    null,
+                    new System.Type[] { typeof(Texture2D), typeof(byte[]) },
+                    null
+                );
+                if (loadImage == null)
+                {
+                    UnityModManager.Logger.Log("[MeterVisualPatch] LoadImage method not found");
+                    return null;
+                }
+                bool success = (bool)loadImage.Invoke(null, new object[] { texture, bytes });
+                if (!success)
+                    return null;
+
+                texture.wrapMode = TextureWrapMode.Clamp;
+                texture.filterMode = FilterMode.Bilinear;
+
+                Rect rect = new Rect(0f, 0f, texture.width, texture.height);
+                Vector2 pivot = new Vector2(0.5f, 0.5f);
+
+                adopted = true;
+                return Sprite.Create(texture, rect, pivot, 100f);
             }
-            var loadImage = imageConversionType.GetMethod(
-                "LoadImage",
-                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public,
-                null,
-                new System.Type[] { typeof(Texture2D), typeof(byte[]) },
-                null
-            );
-            if (loadImage == null)
+            finally
             {
-                UnityModManager.Logger.Log("[MeterVisualPatch] LoadImage method not found");
-                return null;
+                if (texture != null && !adopted)
+                    UnityEngine.Object.Destroy(texture);
             }
-            bool success = (bool)loadImage.Invoke(null, new object[] { texture, bytes });
-            if (!success)
-                return null;
-
-            texture.wrapMode = TextureWrapMode.Clamp;
-            texture.filterMode = FilterMode.Bilinear;
-
-            Rect rect = new Rect(0f, 0f, texture.width, texture.height);
-            Vector2 pivot = new Vector2(0.5f, 0.5f);
-
-            return Sprite.Create(texture, rect, pivot, 100f);
         }
         public static void RefreshAllMeters()
         {
