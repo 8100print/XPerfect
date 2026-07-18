@@ -1,5 +1,6 @@
 ﻿using HarmonyLib;
 using TMPro;
+using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityModManagerNet;
@@ -11,11 +12,7 @@ namespace XPerfect
 {
     public static class CounterDisplay
     {
-        private static readonly Color32 PlusMinusColor = new Color32(96, 255, 78, 255);
-        private static readonly Color32 XColor = new Color32(77, 204, 255, 255);
-
-        private static readonly string PlusMinusHex = ColorUtility.ToHtmlStringRGB(PlusMinusColor);
-        private static readonly string XColorHex = ColorUtility.ToHtmlStringRGB(XColor);
+        private static Material _cachedMaterial;
 
         private static string _cachedSpace = "";
         private static int _lastSpacing = -1;
@@ -26,8 +23,10 @@ namespace XPerfect
         private static GameObject _canvasObj;
         private static TMP_Text _text;
         private static TMP_FontAsset _cachedFont;
+        private static Font _sourceFont;
 
-        private static readonly StringBuilder _counterBuilder = new StringBuilder(128);
+
+        private static readonly StringBuilder _counterBuilder = new StringBuilder(64);
 
 
         public static void Create()
@@ -60,6 +59,22 @@ namespace XPerfect
             UnityEngine.Object.Destroy(_canvasObj);
             _canvasObj = null;
             _text = null;
+
+            if (_cachedFont != null)
+            {
+                UnityEngine.Object.Destroy(_cachedFont);
+                _cachedFont = null;
+            }
+            if (_sourceFont != null)
+            {
+                UnityEngine.Object.Destroy(_sourceFont);
+                _sourceFont = null;
+            }
+            if (_cachedMaterial != null)
+            {
+                try { UnityEngine.Object.Destroy(_cachedMaterial); } catch { }
+                _cachedMaterial = null;
+            }
         }
 
 
@@ -81,10 +96,25 @@ namespace XPerfect
             tmp.fontSize = Main.Settings.CounterFontSize;
             tmp.text = "0 0 0";
             tmp.richText = true;
+            tmp.textWrappingMode = TextWrappingModes.NoWrap;
+            tmp.overflowMode = TMPro.TextOverflowModes.Overflow;
+
+            if (_cachedMaterial != null)
+            {
+                try { UnityEngine.Object.Destroy(_cachedMaterial); } catch { }
+                _cachedMaterial = null;
+            }
 
             var mat = new Material(tmp.fontSharedMaterial);
+            _cachedMaterial = mat;
             mat.DisableKeyword(TMPro.ShaderUtilities.Keyword_Outline);
             mat.DisableKeyword(TMPro.ShaderUtilities.Keyword_Underlay);
+
+            try
+            {
+                mat.SetFloat("_OutlineWidth", 0f); mat.SetColor("_OutlineColor", new Color(0f, 0f, 0f, 0f));
+            }
+            catch { }
             tmp.fontSharedMaterial = mat;
 
             return tmp;
@@ -94,12 +124,32 @@ namespace XPerfect
         {
             try
             {
-                _cachedFont = FindFont();
+                _cachedFont = LoadFont();
                 if (_cachedFont == null)
                 {
                     return;
                 }
-                if (_text != null) _text.font = _cachedFont;
+                if (_text != null)
+                {
+                    _text.font = _cachedFont;
+
+                    try
+                    {
+                        if (_cachedMaterial != null)
+                        {
+                            try { UnityEngine.Object.Destroy(_cachedMaterial); } catch { }
+                            _cachedMaterial = null;
+                        }
+
+                        var mat = new Material(_text.fontSharedMaterial);
+                        mat.DisableKeyword(TMPro.ShaderUtilities.Keyword_Outline);
+                        mat.SetFloat("_OutlineWidth", 0f);
+                        mat.SetColor("_OutlineColor", new Color(0f, 0f, 0f, 0f));
+                        _cachedMaterial = mat;
+                        _text.fontSharedMaterial = mat;
+                    }
+                    catch { }
+                }
             }
             catch (Exception ex)
             {
@@ -107,29 +157,39 @@ namespace XPerfect
             }
         }
 
-        private static TMP_FontAsset FindFont()
+        private static TMP_FontAsset LoadFont()
         {
+            string path = Path.Combine(UnityModManager.modsPath, "XPerfect", "Maplestory OTF Bold.otf");
+
             try
             {
-                var fontTMP = RDString.fontData.fontTMP;
-                if (fontTMP != null)
+                if (_cachedFont != null)
                 {
-                    return fontTMP;
+                    UnityEngine.Object.Destroy(_cachedFont);
+                    _cachedFont = null;
                 }
+                if (_sourceFont != null)
+                {
+                    UnityEngine.Object.Destroy(_sourceFont);
+                    _sourceFont = null;
+                }
+
+                if (!File.Exists(path))
+                {
+                    UnityModManager.Logger.Log($"[XPerfect] font not found: {path}");
+                    return null;
+                }
+
+                _sourceFont = new Font(path);
+                var asset = TMP_FontAsset.CreateFontAsset(_sourceFont);
+                asset.isMultiAtlasTexturesEnabled = true;
+                return asset;
             }
             catch (Exception ex)
             {
-                UnityModManager.Logger.Log($"[XPerfect] RDString.fontData error: {ex}");
+                UnityModManager.Logger.Log($"[XPerfect] LoadFont error: {ex}");
+                return null;
             }
-
-            foreach (var t in UnityEngine.Object.FindObjectsByType<TMP_Text>(FindObjectsSortMode.None))
-            {
-                if (t == null || t.font == null) continue;
-                if (ReferenceEquals(t, _text)) continue;
-                if (t.font.name.IndexOf("Liberation", StringComparison.OrdinalIgnoreCase) >= 0) continue;
-                return t.font;
-            }
-            return null;
         }
 
         public static void ApplySettings()
@@ -168,42 +228,23 @@ namespace XPerfect
             var sb = _counterBuilder;
             sb.Length = 0;
 
-            bool coop = scrController.coopMode;
-            int count = coop ? AccuracyState.PlayerCount : 1;
-
-            for (int p = 0; p < count; p++)
-            {
-                if (p > 0) sb.Append('\n');
-
-                if (coop)
-                {
-                    string col = GetPlayerColor(p);
-
-                    sb.Append("<color=#");
-                    sb.Append(col);
-                    sb.Append(">P");
-                    AppendInt(sb, p + 1);
-                    sb.Append("</color> ");
-                }
-
-                sb.Append("<color=#");
-                sb.Append(PlusMinusHex);
-                sb.Append(">+");
-                AppendInt(sb, coop ? AccuracyState.GetPlayerPlusPerfectCount(p) : AccuracyState.PlusPerfectCount);
-                sb.Append("</color>");
-                sb.Append(space);
-                sb.Append("<color=#");
-                sb.Append(XColorHex);
-                sb.Append(">");
-                AppendInt(sb, coop ? AccuracyState.GetPlayerXPerfectCount(p) : AccuracyState.XPerfectCount);
-                sb.Append("</color>");
-                sb.Append(space);
-                sb.Append("<color=#");
-                sb.Append(PlusMinusHex);
-                sb.Append(">-");
-                AppendInt(sb, coop ? AccuracyState.GetPlayerMinusPerfectCount(p) : AccuracyState.MinusPerfectCount);
-                sb.Append("</color>");
-            }
+            sb.Append("<color=#");
+            sb.Append(XPerfectColors.PlusMinusHex);
+            sb.Append(">");
+            AppendInt(sb, AccuracyState.PlusPerfectCount);
+            sb.Append("</color>");
+            sb.Append(space);
+            sb.Append("<color=#");
+            sb.Append(XPerfectColors.XPerfectHex);
+            sb.Append(">");
+            AppendInt(sb, AccuracyState.XPerfectCount);
+            sb.Append("</color>");
+            sb.Append(space);
+            sb.Append("<color=#");
+            sb.Append(XPerfectColors.PlusMinusHex);
+            sb.Append(">");
+            AppendInt(sb, AccuracyState.MinusPerfectCount);
+            sb.Append("</color>");
 
             _text.text = sb.ToString();
 
@@ -244,34 +285,19 @@ namespace XPerfect
             }
         }
 
-        private static string GetPlayerColor(int player)
-        {
-            try
-            {
-                if (scrPlayerManager.playerColors != null && player < scrPlayerManager.playerColors.Length)
-                {
-                    var c = scrPlayerManager.playerColors[player].ToRealColor();
-                    return ColorUtility.ToHtmlStringRGB(c);
-                }
-            }
-            catch { }
-            // Fallback: game defaults (P1=CoopRed, P2=CoopBlue, P3=CoopYellow, P4=CoopGreen)
-            switch (player)
-            {
-                case 0: return "FF4444";
-                case 1: return "4488FF";
-                case 2: return "FFD700";
-                case 3: return "44DD44";
-                default: return "FFFFFF";
-            }
-        }
-
         private static string GetSpace()
         {
             int s = Main.Settings.CounterSpacing * 2;
             if (s != _lastSpacing)
             {
-                _cachedSpace = new string(' ', s);
+                if (s <= 0)
+                {
+                    _cachedSpace = string.Empty;
+                }
+                else
+                {
+                    _cachedSpace = "<space=" + s.ToString() + "px>";
+                }
                 _lastSpacing = s;
             }
             return _cachedSpace;

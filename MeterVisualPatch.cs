@@ -26,19 +26,8 @@ namespace XPerfect
         private static Sprite straightSprite;
         private static Sprite curvedSprite;
 
-        private static readonly System.Collections.Generic.Dictionary<int, (Sprite straight, Sprite curved)> _originalSprites =
-            new System.Collections.Generic.Dictionary<int, (Sprite straight, Sprite curved)>();
-
-        private static (Sprite straight, Sprite curved) GetOrCreateOriginalEntry(scrHitErrorMeter meter)
-        {
-            int key = meter.GetInstanceID();
-            if (!_originalSprites.TryGetValue(key, out var entry))
-            {
-                entry = (null, null);
-                _originalSprites[key] = entry;
-            }
-            return entry;
-        }
+        private static Sprite originalStraightSprite;
+        private static Sprite originalCurvedSprite;
 
         [HarmonyPatch(typeof(scrHitErrorMeter), "UpdateLayout")]
         [HarmonyPostfix]
@@ -92,66 +81,75 @@ namespace XPerfect
         [HarmonyPatch(typeof(scrHitErrorMeter), "AddHit")]
         [HarmonyPriority(Priority.Normal)]
         [HarmonyPostfix]
-        public static void AddHitPostfix(scrHitErrorMeter __instance, float angleDiff, float marginScale = 1f, scrPlanet planet = null, scrFloor hitFloor = null)
+        public static void AddHitPostfix(scrHitErrorMeter __instance, float angleDiff, float marginScale = 1f, scrPlanet planet = null)
         {
-            if (!Main.Enabled)
-                return;
-
-            if (__instance == null)
-                return;
-
-            if (scrConductor.instance == null || scrController.instance == null)
-                return;
-
-            Image[] cachedTickImages = GetCachedTickImages(__instance);
-            if (cachedTickImages == null || cachedTickImages.Length == 0)
-                return;
-
-            int tickIndex = GetTickIndex(__instance);
-            int tickCacheSize = GetTickCacheSize(__instance);
-            ErrorMeterShape meterShape = GetMeterShape(__instance);
-
-            int justAddedTickIndex = tickIndex - 1;
-            if (justAddedTickIndex < 0)
-                justAddedTickIndex = tickCacheSize - 1;
-
-            if (justAddedTickIndex < 0 || justAddedTickIndex >= cachedTickImages.Length)
-                return;
-
-            Image tickImage = cachedTickImages[justAddedTickIndex];
-            if (tickImage == null)
-                return;
-
-            float normalizedAngle = GetMeterAngleFromTick(tickImage, meterShape);
-
-            float? floorSpeedAdd = (hitFloor ?? planet?.player?.currFloor?.prevfloor)?.speed;
-            double bpmTimesSpeed = scrConductor.instance.bpm * (floorSpeedAdd ?? 1.0);
-            double conductorPitch = scrConductor.instance.song.pitch;
-
-            double pureBoundaryDeg = scrMisc.GetAdjustedAngleBoundaryInDeg(
-                HitMarginGeneral.Pure, bpmTimesSpeed, conductorPitch, marginScale);
-
-            double countedBoundaryDeg = scrMisc.GetAdjustedAngleBoundaryInDeg(
-                HitMarginGeneral.Counted, bpmTimesSpeed, conductorPitch, marginScale);
-
-            if (countedBoundaryDeg <= 0.0)
-                return;
-
-            double scale = 60.0 / countedBoundaryDeg;
-            double normalizedPureBoundary = pureBoundaryDeg * scale;
-
-            if (normalizedAngle < -normalizedPureBoundary || normalizedAngle > normalizedPureBoundary)
-                return;
-
-            const float xCompress = 0.75f;
-
-            double xPerfectMeterBoundary = AccuracyMath.GetMeterXPerfectBoundaryDeg(
-                bpmTimesSpeed, conductorPitch, countedBoundaryDeg, marginScale);
-
-            if (Math.Abs(normalizedAngle) <= xPerfectMeterBoundary)
+            try
             {
-                float finalAngle = normalizedAngle * xCompress;
-                ApplyTickAngle(tickImage, meterShape, finalAngle);
+                if (!Main.Enabled)
+                    return;
+
+                if (__instance == null)
+                    return;
+
+                if (scrConductor.instance == null || scrController.instance == null)
+                    return;
+
+                Image[] cachedTickImages = GetCachedTickImages(__instance);
+                if (cachedTickImages == null || cachedTickImages.Length == 0)
+                    return;
+
+                int tickIndex = GetTickIndex(__instance);
+                int tickCacheSize = GetTickCacheSize(__instance);
+                ErrorMeterShape meterShape = GetMeterShape(__instance);
+
+                int justAddedTickIndex = tickIndex - 1;
+                if (justAddedTickIndex < 0)
+                    justAddedTickIndex = tickCacheSize - 1;
+
+                if (justAddedTickIndex < 0 || justAddedTickIndex >= cachedTickImages.Length)
+                    return;
+
+                Image tickImage = cachedTickImages[justAddedTickIndex];
+                if (tickImage == null)
+                    return;
+
+                float normalizedAngle = GetMeterAngleFromTick(tickImage, meterShape);
+
+                float? floorSpeed = (planet?.player?.currFloor?.prevfloor)?.speed;
+
+                double bpmTimesSpeed = scrConductor.instance.bpm * (floorSpeed ?? GCS.currentSpeedTrial);
+
+                double conductorPitch = scrConductor.instance.song.pitch;
+
+                double pureBoundaryDeg = scrMisc.GetAdjustedAngleBoundaryInDeg(
+                    HitMarginGeneral.Pure, bpmTimesSpeed, conductorPitch, marginScale);
+
+                double countedBoundaryDeg = scrMisc.GetAdjustedAngleBoundaryInDeg(
+                    HitMarginGeneral.Counted, bpmTimesSpeed, conductorPitch, marginScale);
+
+                if (countedBoundaryDeg <= 0.0)
+                    return;
+
+                double scale = 60.0 / countedBoundaryDeg;
+                double normalizedPureBoundary = pureBoundaryDeg * scale;
+
+                if (normalizedAngle < -normalizedPureBoundary || normalizedAngle > normalizedPureBoundary)
+                    return;
+
+                const float xCompress = 0.75f;
+
+                double xPerfectMeterBoundary = AccuracyMath.GetMeterXPerfectBoundaryDeg(
+                    bpmTimesSpeed, conductorPitch, countedBoundaryDeg, marginScale);
+
+                if (Math.Abs(normalizedAngle) <= xPerfectMeterBoundary)
+                {
+                    float finalAngle = normalizedAngle * xCompress;
+                    ApplyTickAngle(tickImage, meterShape, finalAngle);
+                }
+            }
+            catch (Exception ex)
+            {
+                UnityModManager.Logger.Log($"[MeterVisualPatch/AddHit] {ex}");
             }
         }
 
@@ -159,30 +157,38 @@ namespace XPerfect
         public static class MeterTickColorPatch
         {
             [HarmonyPrefix]
-            public static bool Prefix(ref Color __result, float angle, float marginScale = 1f, scrFloor hitFloor = null)
+            public static bool Prefix(ref Color __result, float angle, float marginScale = 1f)
             {
-                if (!Main.Enabled)
-                    return true;
-
-                if (scrController.instance == null || scrConductor.instance == null)
-                    return true;
-
-                double bpmTimesSpeed = scrConductor.instance.bpm * ((hitFloor ?? scrController.instance.playerOne?.currFloor?.prevfloor)?.speed ?? 1.0);
-                double conductorPitch = scrConductor.instance.song.pitch;
-
-                double xPerfectBoundary = AccuracyMath.GetMeterXPerfectBoundaryDeg(
-                    bpmTimesSpeed,
-                    conductorPitch,
-                    marginScale
-                );
-
-                if (Math.Abs(angle) <= xPerfectBoundary)
+                try
                 {
-                    __result = new Color(0.3f, 0.8f, 1f, 1f);
-                    return false;
-                }
+                    if (!Main.Enabled)
+                        return true;
 
-                return true;
+                    if (scrController.instance == null || scrConductor.instance == null)
+                        return true;
+
+                    double bpmTimesSpeed = scrConductor.instance.bpm * ((scrController.instance.playerOne?.currFloor?.prevfloor)?.speed ?? GCS.currentSpeedTrial);
+                    double conductorPitch = scrConductor.instance.song.pitch;
+
+                    double xPerfectBoundary = AccuracyMath.GetMeterXPerfectBoundaryDeg(
+                        bpmTimesSpeed,
+                        conductorPitch,
+                        marginScale
+                    );
+
+                    if (Math.Abs(angle) <= xPerfectBoundary)
+                    {
+                        __result = (Color)XPerfectColors.XPerfect;
+                        return false;
+                    }
+
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    UnityModManager.Logger.Log($"[MeterTickColorPatch] {ex}");
+                    return true;
+                }
             }
         }
 
@@ -190,23 +196,18 @@ namespace XPerfect
         {
             if (meter == null) return;
 
-            var entry = GetOrCreateOriginalEntry(meter);
-
             if (meter.straightMeter != null)
             {
                 Image image = meter.straightMeter.GetComponent<Image>();
                 if (image != null && image.sprite != straightSprite)
-                    _originalSprites[meter.GetInstanceID()] = (straight: image.sprite, curved: entry.curved);
+                    originalStraightSprite = image.sprite;
             }
 
             if (meter.curvedMeter != null)
             {
                 Image image = meter.curvedMeter.GetComponent<Image>();
                 if (image != null && image.sprite != curvedSprite)
-                {
-                    var current = _originalSprites[meter.GetInstanceID()];
-                    _originalSprites[meter.GetInstanceID()] = (straight: current.straight, curved: image.sprite);
-                }
+                    originalCurvedSprite = image.sprite;
             }
         }
 
@@ -214,14 +215,11 @@ namespace XPerfect
         {
             if (meter == null) return;
 
-            if (_originalSprites.TryGetValue(meter.GetInstanceID(), out var entry))
-            {
-                if (meter.straightMeter != null && entry.straight != null)
-                    ReplaceRootImageOnly(meter.straightMeter, entry.straight);
+            if (meter.straightMeter != null && originalStraightSprite != null)
+                ReplaceRootImageOnly(meter.straightMeter, originalStraightSprite);
 
-                if (meter.curvedMeter != null && entry.curved != null)
-                    ReplaceRootImageOnly(meter.curvedMeter, entry.curved);
-            }
+            if (meter.curvedMeter != null && originalCurvedSprite != null)
+                ReplaceRootImageOnly(meter.curvedMeter, originalCurvedSprite);
         }
 
         private static float GetMeterAngleFromTick(Image tickImage, ErrorMeterShape meterShape)
@@ -333,6 +331,7 @@ namespace XPerfect
                     UnityEngine.Object.Destroy(texture);
             }
         }
+
         public static void RefreshAllMeters()
         {
             try

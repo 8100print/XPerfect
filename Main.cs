@@ -26,6 +26,7 @@ namespace XPerfect
             modEntry.OnToggle = OnToggle;
             modEntry.OnGUI = OnGUI;
             modEntry.OnSaveGUI = OnSaveGUI;
+            modEntry.OnUnload = OnUnload;
 
             Enabled = true;
             AccuracyState.Reset();
@@ -56,6 +57,32 @@ namespace XPerfect
             return true;
         }
 
+        private static bool OnUnload(UnityModManager.ModEntry modEntry)
+        {
+            try
+            {
+                Enabled = false;
+
+                MeterVisualPatch.RefreshAllMeters();
+
+                CounterDisplay.Destroy();
+
+                if (_runnerGo != null)
+                {
+                    UnityEngine.Object.Destroy(_runnerGo);
+                    _runnerGo = null;
+                }
+
+                if (_harmony != null)
+                {
+                    try { _harmony.UnpatchAll(modEntry.Info.Id); } catch { }
+                    _harmony = null;
+                }
+            }
+            catch { }
+            return true;
+        }
+
         private static void OnGUI(UnityModManager.ModEntry modEntry)
         {
             Settings.HideXPerfect = GUILayout.Toggle(Settings.HideXPerfect, "Hide XPerfect");
@@ -74,11 +101,14 @@ namespace XPerfect
                 int prevSize = Settings.CounterFontSize;
                 GUILayout.BeginHorizontal();
                 GUILayout.Label("Font Size:", GUILayout.Width(90));
-                Settings.CounterFontSize = (int)GUILayout.HorizontalSlider(Settings.CounterFontSize, 0, 100, GUILayout.Width(180));
+                int sliderFontSize = Mathf.Clamp(Settings.CounterFontSize, 0, 100);
+                sliderFontSize = (int)GUILayout.HorizontalSlider(sliderFontSize, 0, 100, GUILayout.Width(180));
+                if (sliderFontSize != Mathf.Clamp(prevSize, 0, 100))
+                    Settings.CounterFontSize = sliderFontSize;
+
                 string sizeStr = GUILayout.TextField(Settings.CounterFontSize.ToString(), GUILayout.Width(60));
                 if (int.TryParse(sizeStr, out int parsedSize))
                 {
-                    parsedSize = Mathf.Clamp(parsedSize, 0, 100);
                     Settings.CounterFontSize = parsedSize;
                 }
                 GUILayout.EndHorizontal();
@@ -86,15 +116,18 @@ namespace XPerfect
                     CounterDisplay.ApplySettings();
 
                 //Spacing
-                float prevSpacing = Settings.CounterSpacing;
+                int prevSpacing = Settings.CounterSpacing;
                 GUILayout.BeginHorizontal();
                 GUILayout.Label("Spacing:", GUILayout.Width(90));
-                Settings.CounterSpacing = (int)GUILayout.HorizontalSlider(Settings.CounterSpacing, 0f, 5f, GUILayout.Width(180));
+                int sliderSpacing = Mathf.Clamp(Settings.CounterSpacing, 0, 50);
+                sliderSpacing = (int)GUILayout.HorizontalSlider(sliderSpacing, 0f, 50f, GUILayout.Width(180));
+                if (sliderSpacing != Mathf.Clamp(prevSpacing, 0, 50))
+                    Settings.CounterSpacing = sliderSpacing;
+
                 string spacingStr = GUILayout.TextField(Settings.CounterSpacing.ToString(), GUILayout.Width(60));
-                if (float.TryParse(spacingStr, out float parsedSpacing))
+                if (int.TryParse(spacingStr, out int parsedSpacingInt))
                 {
-                    parsedSpacing = Mathf.Clamp(parsedSpacing, 0f, 5f);
-                    Settings.CounterSpacing = (int)parsedSpacing;
+                    Settings.CounterSpacing = parsedSpacingInt;
                 }
                 GUILayout.EndHorizontal();
                 if (Settings.CounterSpacing != prevSpacing)
@@ -104,11 +137,14 @@ namespace XPerfect
                 float prevX = Settings.CounterX;
                 GUILayout.BeginHorizontal();
                 GUILayout.Label("Position X:", GUILayout.Width(90));
-                Settings.CounterX = GUILayout.HorizontalSlider(Settings.CounterX, -Screen.width, Screen.width, GUILayout.Width(180));
+                float sliderX = Mathf.Clamp(Settings.CounterX, -Screen.width, Screen.width);
+                sliderX = GUILayout.HorizontalSlider(sliderX, -Screen.width, Screen.width, GUILayout.Width(180));
+                if (!Mathf.Approximately(sliderX, Mathf.Clamp(prevX, -Screen.width, Screen.width)))
+                    Settings.CounterX = sliderX;
+
                 string xStr = GUILayout.TextField(Settings.CounterX.ToString("F0"), GUILayout.Width(60));
                 if (float.TryParse(xStr, out float parsedX))
                 {
-                    parsedX = Mathf.Clamp(parsedX, -Screen.width, Screen.width);
                     Settings.CounterX = parsedX;
                 }
                 GUILayout.EndHorizontal();
@@ -119,11 +155,14 @@ namespace XPerfect
                 float prevY = Settings.CounterY;
                 GUILayout.BeginHorizontal();
                 GUILayout.Label("Position Y:", GUILayout.Width(90));
-                Settings.CounterY = GUILayout.HorizontalSlider(Settings.CounterY, -Screen.height, Screen.height, GUILayout.Width(180));
+                float sliderY = Mathf.Clamp(Settings.CounterY, -Screen.height, Screen.height);
+                sliderY = GUILayout.HorizontalSlider(sliderY, -Screen.height, Screen.height, GUILayout.Width(180));
+                if (!Mathf.Approximately(sliderY, Mathf.Clamp(prevY, -Screen.height, Screen.height)))
+                    Settings.CounterY = sliderY;
+
                 string yStr = GUILayout.TextField(Settings.CounterY.ToString("F0"), GUILayout.Width(60));
                 if (float.TryParse(yStr, out float parsedY))
                 {
-                    parsedY = Mathf.Clamp(parsedY, -Screen.height, Screen.height);
                     Settings.CounterY = parsedY;
                 }
                 GUILayout.EndHorizontal();
@@ -149,8 +188,8 @@ namespace XPerfect
         public bool XPerfectOnly = false;
 
         public bool ShowCounter = false;
-        public int CounterFontSize = 60;
-        public int CounterSpacing = 1;
+        public int CounterFontSize = 40;
+        public int CounterSpacing = 20;
         public float CounterX = 0f;
         public float CounterY = 0f;
 

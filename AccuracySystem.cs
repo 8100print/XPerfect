@@ -16,165 +16,93 @@ namespace XPerfect
 
     public static class AccuracyState
     {
-        private const int MaxPlayers = 4;
+        public static int PlusPerfectCount { get; private set; }
+        public static int XPerfectCount { get; private set; }
+        public static int MinusPerfectCount { get; private set; }
 
-        private static int[] _plusCount = new int[MaxPlayers];
-        private static int[] _xCount = new int[MaxPlayers];
-        private static int[] _minusCount = new int[MaxPlayers];
-        private static List<DetailedJudge>[] _judgeHistory = new List<DetailedJudge>[MaxPlayers];
-        private static int[] _checkpointSize = new int[MaxPlayers];
-        private static DetailedJudge[] _lastJudge = new DetailedJudge[MaxPlayers];
-        private static DetailedJudge[] _lastJudgeForText = new DetailedJudge[MaxPlayers];
-        internal static int _currentPlayerId = 0;
+        public static DetailedJudge LastJudge { get; private set; } = DetailedJudge.None;
+        public static DetailedJudge LastJudgeForText { get; private set; } = DetailedJudge.None;
 
-        static AccuracyState()
+        private static readonly List<DetailedJudge> JudgeHistory = new List<DetailedJudge>();
+        private static int CheckpointSize;
+
+        public static void RecordJudge(DetailedJudge judge)
         {
-            for (int i = 0; i < MaxPlayers; i++)
-            {
-                _judgeHistory[i] = new List<DetailedJudge>();
-                _lastJudge[i] = DetailedJudge.None;
-                _lastJudgeForText[i] = DetailedJudge.None;
-            }
+            LastJudge = judge;
+            LastJudgeForText = judge;
         }
 
-        internal static int PlayerCount =>
-            Math.Min(scrMistakesManager.marginTrackers?.Length ?? 1, MaxPlayers);
-
-        public static int PlusPerfectCount
+        public static void ConsumeJudge()
         {
-            get { int p = 0; int n = PlayerCount; for (int i = 0; i < n; i++) p += _plusCount[i]; return p; }
-        }
-        public static int XPerfectCount
-        {
-            get { int x = 0; int n = PlayerCount; for (int i = 0; i < n; i++) x += _xCount[i]; return x; }
-        }
-        public static int MinusPerfectCount
-        {
-            get { int m = 0; int n = PlayerCount; for (int i = 0; i < n; i++) m += _minusCount[i]; return m; }
+            LastJudge = DetailedJudge.None;
         }
 
-
-        public static int GetCount(int player, DetailedJudge judge)
+        public static void ConsumeJudgeForText()
         {
-            if (player < 0 || player >= MaxPlayers) return 0;
+            LastJudgeForText = DetailedJudge.None;
+        }
+
+        public static void IncrementCount(DetailedJudge judge)
+        {
+            JudgeHistory.Add(judge);
+
             switch (judge)
             {
-                case DetailedJudge.PlusPerfect: return _plusCount[player];
-                case DetailedJudge.XPerfect: return _xCount[player];
-                case DetailedJudge.MinusPerfect: return _minusCount[player];
-                default: return 0;
-            }
-        }
+                case DetailedJudge.PlusPerfect:
+                    PlusPerfectCount++;
+                    break;
 
-        public static void GetCombinedCounts(out int plus, out int x, out int minus)
-        {
-            plus = 0; x = 0; minus = 0;
-            int n = PlayerCount;
-            for (int p = 0; p < n; p++)
-            {
-                plus += _plusCount[p];
-                x += _xCount[p];
-                minus += _minusCount[p];
-            }
-        }
+                case DetailedJudge.XPerfect:
+                    XPerfectCount++;
+                    break;
 
-        public static int GetPlayerPlusPerfectCount(int player) => GetCount(player, DetailedJudge.PlusPerfect);
-        public static int GetPlayerXPerfectCount(int player) => GetCount(player, DetailedJudge.XPerfect);
-        public static int GetPlayerMinusPerfectCount(int player) => GetCount(player, DetailedJudge.MinusPerfect);
-
-        public static DetailedJudge LastJudge => _lastJudge[_currentPlayerId];
-        public static DetailedJudge LastJudgeForText => _lastJudgeForText[_currentPlayerId];
-
-        public static DetailedJudge GetPlayerLastJudge(int player)
-        {
-            return (player >= 0 && player < MaxPlayers) ? _lastJudge[player] : DetailedJudge.None;
-        }
-        public static DetailedJudge GetPlayerLastJudgeForText(int player)
-        {
-            return (player >= 0 && player < MaxPlayers) ? _lastJudgeForText[player] : DetailedJudge.None;
-        }
-
-        public static void RecordJudge(int player, DetailedJudge judge)
-        {
-            if (player < 0 || player >= MaxPlayers) return;
-            _lastJudge[player] = judge;
-            _lastJudgeForText[player] = judge;
-        }
-
-        public static void ConsumeJudge(int player)
-        {
-            if (player < 0 || player >= MaxPlayers) return;
-            _lastJudge[player] = DetailedJudge.None;
-        }
-        public static void ConsumeJudgeForText(int player)
-        {
-            if (player < 0 || player >= MaxPlayers) return;
-            _lastJudgeForText[player] = DetailedJudge.None;
-        }
-
-        public static void AddHit(int player, DetailedJudge judge)
-        {
-            if (player < 0 || player >= PlayerCount) return;
-            _judgeHistory[player].Add(judge);
-            switch (judge)
-            {
-                case DetailedJudge.PlusPerfect: _plusCount[player]++; break;
-                case DetailedJudge.XPerfect: _xCount[player]++; break;
-                case DetailedJudge.MinusPerfect: _minusCount[player]++; break;
+                case DetailedJudge.MinusPerfect:
+                    MinusPerfectCount++;
+                    break;
             }
         }
 
         public static void Reset()
         {
-            for (int p = 0; p < MaxPlayers; p++)
+            PlusPerfectCount = 0;
+            XPerfectCount = 0;
+            MinusPerfectCount = 0;
+
+            JudgeHistory.Clear();
+            CheckpointSize = 0;
+
+            LastJudge = DetailedJudge.None;
+            LastJudgeForText = DetailedJudge.None;
+        }
+        public static void MarkCheckpoint()
+        {
+            CheckpointSize = JudgeHistory.Count;
+        }
+
+        public static void RevertToCheckpoint()
+        {
+            while (JudgeHistory.Count > CheckpointSize)
             {
-                _plusCount[p] = 0;
-                _xCount[p] = 0;
-                _minusCount[p] = 0;
-                _judgeHistory[p].Clear();
-                _checkpointSize[p] = 0;
-                _lastJudge[p] = DetailedJudge.None;
-                _lastJudgeForText[p] = DetailedJudge.None;
-            }
-        }
+                int last = JudgeHistory.Count - 1;
+                DetailedJudge judge = JudgeHistory[last];
+                JudgeHistory.RemoveAt(last);
 
-        public static void MarkCheckpoint(int player = 0)
-        {
-            if (player < 0 || player >= PlayerCount) return;
-            _checkpointSize[player] = _judgeHistory[player].Count;
-        }
-
-        public static void MarkAllCheckpoints()
-        {
-            for (int p = 0; p < PlayerCount; p++)
-                _checkpointSize[p] = _judgeHistory[p].Count;
-        }
-
-        public static void RevertToCheckpoint(int player = 0)
-        {
-            if (player < 0 || player >= PlayerCount) return;
-            var history = _judgeHistory[player];
-            while (history.Count > _checkpointSize[player])
-            {
-                int last = history.Count - 1;
-                DetailedJudge judge = history[last];
-                history.RemoveAt(last);
                 switch (judge)
                 {
-                    case DetailedJudge.PlusPerfect: _plusCount[player]--; break;
-                    case DetailedJudge.XPerfect: _xCount[player]--; break;
-                    case DetailedJudge.MinusPerfect: _minusCount[player]--; break;
+                    case DetailedJudge.PlusPerfect:
+                        PlusPerfectCount--;
+                        break;
+
+                    case DetailedJudge.XPerfect:
+                        XPerfectCount--;
+                        break;
+
+                    case DetailedJudge.MinusPerfect:
+                        MinusPerfectCount--;
+                        break;
                 }
             }
         }
-
-        public static void RevertAllToCheckpoint()
-        {
-            for (int p = 0; p < PlayerCount; p++)
-                RevertToCheckpoint(p);
-        }
-
-
     }
 
     public static class AccuracyMath
@@ -243,11 +171,11 @@ namespace XPerfect
             double conductorPitch,
             float marginScale = 1f)
         {
-            if (RDC.auto)
-                return DetailedJudge.XPerfect;
-
             if (result != HitMargin.Perfect)
                 return DetailedJudge.None;
+
+            if (RDC.auto)
+                return DetailedJudge.XPerfect;
 
             float signedDeltaDeg = AccuracyMath.GetSignedDeltaDeg(hitAngle, refAngle, isCW);
             float absDeltaDeg = Mathf.Abs(signedDeltaDeg);
@@ -269,20 +197,27 @@ namespace XPerfect
     [HarmonyPriority(Priority.High)]
     public static class HitMarginPatch
     {
-        static void Postfix(ref HitMargin __result, float hitangle, float refangle, bool isCW, float bpmTimesSpeed, float conductorPitch, double marginScale = 1f)
+        static void Postfix(ref HitMargin __result, float hitangle, float refangle, bool isCW, float bpmTimesSpeed, float conductorPitch, float marginScale = 1f)
         {
-            if (!Main.Enabled) return;
-            if (scrController.instance == null || scrConductor.instance == null) return;
-            if ((States)scrController.instance.stateMachine.GetState() != States.PlayerControl) return;
+            try
+            {
+                if (!Main.Enabled) return;
+                if (scrController.instance == null || scrConductor.instance == null) return;
+                if ((States)scrController.instance.stateMachine.GetState() != States.PlayerControl) return;
 
-            double bpmTimesSpeed2 = (double)bpmTimesSpeed;
-            double conductorPitch2 = (double)conductorPitch;
+                double bpmTimesSpeed2 = (double)bpmTimesSpeed;
+                double conductorPitch2 = (double)conductorPitch;
 
-            DetailedJudge detailedJudge = JudgeCalculator.GetDetailedJudge(
-                __result, hitangle, refangle, isCW, bpmTimesSpeed2, conductorPitch2, (float)marginScale);
+                DetailedJudge detailedJudge = JudgeCalculator.GetDetailedJudge(
+                    __result, hitangle, refangle, isCW, bpmTimesSpeed2, conductorPitch2, marginScale);
 
-            if (detailedJudge != DetailedJudge.None)
-                AccuracyState.RecordJudge(AccuracyState._currentPlayerId, detailedJudge);
+                if (detailedJudge != DetailedJudge.None)
+                    AccuracyState.RecordJudge(detailedJudge);
+            }
+            catch (Exception ex)
+            {
+                UnityModManager.Logger.Log($"[XPerfect] HitMargin error: {ex}");
+            }
         }
     }
 
@@ -290,54 +225,40 @@ namespace XPerfect
     [HarmonyPriority(Priority.Normal)]
     public static class IsValidHitPatch
     {
-        internal static bool[] ShouldFailPlayer = new bool[0];
-
-        internal static void EnsureCapacity()
-        {
-            int count = AccuracyState.PlayerCount;
-            if (ShouldFailPlayer.Length < count)
-                System.Array.Resize(ref ShouldFailPlayer, count);
-        }
+        internal static bool ShouldFailPlayer = false;
 
         static void Postfix(ref bool __result, HitMargin margin)
         {
-            if (!Main.Enabled || !Main.Settings.XPerfectOnly) return;
-            if (scrController.instance == null || !scrController.instance.gameworld) return;
-
-            if (RDC.auto) return;
-
-            EnsureCapacity();
-
-            bool shouldBlock = false;
-
-            if (margin != HitMargin.Perfect)
+            try
             {
-                shouldBlock = true;
-            }
-            else
-            {
-                DetailedJudge judge = AccuracyState.LastJudge;
-                if (judge == DetailedJudge.PlusPerfect || judge == DetailedJudge.MinusPerfect)
+                if (!Main.Enabled || !Main.Settings.XPerfectOnly) return;
+                if (scrController.instance == null || !scrController.instance.gameworld) return;
+
+                if (RDC.auto) return;
+
+                bool shouldBlock = false;
+
+                if (margin != HitMargin.Perfect)
+                {
                     shouldBlock = true;
-            }
+                }
+                else
+                {
+                    DetailedJudge judge = AccuracyState.LastJudge;
+                    if (judge == DetailedJudge.PlusPerfect || judge == DetailedJudge.MinusPerfect)
+                        shouldBlock = true;
+                }
 
-            if (shouldBlock)
+                if (shouldBlock)
+                {
+                    __result = false;
+                    ShouldFailPlayer = true;
+                }
+            }
+            catch (Exception ex)
             {
-                __result = false;
-                int pid = AccuracyState._currentPlayerId;
-                if (pid >= 0 && pid < ShouldFailPlayer.Length)
-                    ShouldFailPlayer[pid] = true;
+                UnityModManager.Logger.Log($"[XPerfect] IsValidHit error: {ex}");
             }
-        }
-    }
-
-    [HarmonyPatch(typeof(scrPlanet), "SwitchChosen")]
-    [HarmonyPriority(Priority.High)]
-    public static class PlanetSwitchPrefix
-    {
-        static void Prefix(scrPlanet __instance)
-        {
-            AccuracyState._currentPlayerId = (__instance.player != null) ? __instance.player.playerID : 0;
         }
     }
 
@@ -345,23 +266,21 @@ namespace XPerfect
     [HarmonyPriority(Priority.Normal)]
     public static class SwitchChosenFailPatch
     {
-        static void Postfix(scrPlanet __instance)
+        static void Postfix()
         {
             try
             {
-                int pid = (__instance.player != null) ? __instance.player.playerID : 0;
-                if (pid < 0 || pid >= IsValidHitPatch.ShouldFailPlayer.Length) return;
-                if (!IsValidHitPatch.ShouldFailPlayer[pid]) return;
-                IsValidHitPatch.ShouldFailPlayer[pid] = false;
+                if (!IsValidHitPatch.ShouldFailPlayer) return;
+                IsValidHitPatch.ShouldFailPlayer = false;
 
                 if (!Main.Enabled || !Main.Settings.XPerfectOnly) return;
 
-                var player = __instance.player;
-                if (player == null) return;
+                var ctrl = scrController.instance;
+                if (ctrl == null) return;
 
-                player.Die(false, false, "", true);
+                ctrl.playerOne.Die(false, false, "", true);
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 UnityModManager.Logger.Log($"[XPerfect] SwitchChosen error: {ex}");
             }
@@ -372,23 +291,27 @@ namespace XPerfect
     [HarmonyPriority(Priority.Normal)]
     public static class MistakesManagerAddHitPatch
     {
-        static void Postfix(scrMarginTracker __instance, HitMargin hit)
+        static void Postfix(HitMargin hit)
         {
-            if (!Main.Enabled) return;
-            if (hit != HitMargin.Perfect) return;
-            if (scrController.instance == null || scrConductor.instance == null) return;
-            if ((States)scrController.instance.stateMachine.GetState() != States.PlayerControl) return;
+            try
+            {
+                if (!Main.Enabled) return;
+                if (hit != HitMargin.Perfect) return;
+                if (scrController.instance == null || scrConductor.instance == null) return;
+                if ((States)scrController.instance.stateMachine.GetState() != States.PlayerControl) return;
 
-            int playerId = System.Array.IndexOf(scrMistakesManager.marginTrackers, __instance);
-            if (playerId < 0) playerId = 0;
+                DetailedJudge detailedJudge = AccuracyState.LastJudge;
+                if (detailedJudge == DetailedJudge.None) return;
 
-            DetailedJudge detailedJudge = AccuracyState.GetPlayerLastJudge(playerId);
-            if (detailedJudge == DetailedJudge.None) return;
+                AccuracyState.IncrementCount(detailedJudge);
+                AccuracyState.ConsumeJudge();
 
-            AccuracyState.AddHit(playerId, detailedJudge);
-            AccuracyState.ConsumeJudge(playerId);
-
-            CounterDisplay.Refresh();
+                CounterDisplay.Refresh();
+            }
+            catch (Exception ex)
+            {
+                UnityModManager.Logger.Log($"[XPerfect] AddHit error: {ex}");
+            }
         }
     }
 
@@ -396,55 +319,53 @@ namespace XPerfect
     [HarmonyPriority(Priority.Low)]
     public static class HitTextPatch
     {
-        private static readonly Dictionary<SystemLanguage, string> PerfectTextCache =
-            new Dictionary<SystemLanguage, string>();
-
         private static string StripPrefix(string text)
         {
             if (string.IsNullOrWhiteSpace(text) || text == "\u00A0")
                 return null;
 
-            if (text.StartsWith("X") || text.StartsWith("+") || text.StartsWith("-"))
-                text = text.Substring(1);
-
-            if (string.IsNullOrWhiteSpace(text) || text == "\u00A0")
-                return null;
-
             return text;
         }
-
-        private static void RememberPerfectBaseText(string text)
-        {
-            string baseText = StripPrefix(text);
-            if (string.IsNullOrWhiteSpace(baseText))
-                return;
-
-            PerfectTextCache[Persistence.language] = baseText;
-        }
-
         private static string GetFallbackBaseText()
         {
-            if (PerfectTextCache.TryGetValue(Persistence.language, out string cached) &&
-                !string.IsNullOrWhiteSpace(cached))
+            try
             {
-                return cached;
+                string rd = RDString.Get("HitMargin.Perfect", null);
+                if (!string.IsNullOrWhiteSpace(rd))
+                    return rd;
             }
+            catch { }
 
             return "Perfect!";
         }
 
-        private static string BuildDetailedText(DetailedJudge judge, string currentText)
+        private static string BuildDetailedText(DetailedJudge judge, HitMargin hitMargin, string currentText)
         {
-            string baseText = StripPrefix(currentText);
+
+            string baseText = null;
+
+            try
+            {
+                baseText = RDString.Get("HitMargin." + hitMargin.ToString(), null);
+            }
+            catch { }
+
             if (string.IsNullOrWhiteSpace(baseText))
                 baseText = GetFallbackBaseText();
 
             switch (judge)
             {
-                case DetailedJudge.XPerfect: return "X" + baseText;
-                case DetailedJudge.PlusPerfect: return "+" + baseText;
-                case DetailedJudge.MinusPerfect: return "-" + baseText;
-                default: return baseText;
+                case DetailedJudge.XPerfect:
+                    return "X" + baseText;
+
+                case DetailedJudge.PlusPerfect:
+                    return "+" + baseText;
+
+                case DetailedJudge.MinusPerfect:
+                    return "-" + baseText;
+
+                default:
+                    return baseText;
             }
         }
 
@@ -453,23 +374,19 @@ namespace XPerfect
             try
             {
                 if (__instance == null) return;
+                if (__instance.hitMargin != HitMargin.Perfect) return;
 
                 var tmp = __instance.text;
                 if (tmp == null) return;
 
                 string originalText = tmp.text;
 
-                if (__instance.hitMargin == HitMargin.Perfect)
-                    RememberPerfectBaseText(originalText);
-
-                if (__instance.hitMargin != HitMargin.Perfect)
-                    return;
-
-                Color perfectColor = new Color(0.376f, 1.000f, 0.306f, 1.000f);
+                Color perfectColor = (Color)XPerfectColors.PlusMinus;
 
                 if (!Main.Enabled)
                 {
                     string baseText = StripPrefix(originalText);
+
                     if (string.IsNullOrWhiteSpace(baseText))
                         baseText = GetFallbackBaseText();
 
@@ -482,7 +399,7 @@ namespace XPerfect
                 if (judge == DetailedJudge.None)
                     return;
 
-                Color xPerfectColor = new Color(0.3f, 0.8f, 1f, 1f);
+                Color xPerfectColor = (Color)XPerfectColors.XPerfect;
 
                 if (judge == DetailedJudge.XPerfect && Main.Settings.HideXPerfect)
                 {
@@ -497,9 +414,9 @@ namespace XPerfect
                     return;
                 }
 
-                Color finalColor = judge == DetailedJudge.XPerfect ? xPerfectColor : perfectColor;
+                Color finalColor = judge == DetailedJudge.XPerfect ? (Color)XPerfectColors.XPerfect : (Color)XPerfectColors.PlusMinus;
 
-                tmp.text = BuildDetailedText(judge, originalText);
+                tmp.text = BuildDetailedText(judge, __instance.hitMargin, originalText);
                 tmp.color = finalColor;
             }
             catch (Exception ex)
@@ -510,7 +427,7 @@ namespace XPerfect
             {
                 if (__instance != null && __instance.hitMargin == HitMargin.Perfect)
                 {
-                    AccuracyState.ConsumeJudgeForText(AccuracyState._currentPlayerId);
+                    AccuracyState.ConsumeJudgeForText();
                 }
             }
         }
@@ -521,32 +438,9 @@ namespace XPerfect
     {
         static void Postfix()
         {
-            if (GCS.checkpointNum == 0)
-            {
-                AccuracyState.Reset();
-            }
-            IsValidHitPatch.EnsureCapacity();
-            for (int i = 0; i < IsValidHitPatch.ShouldFailPlayer.Length; i++)
-                IsValidHitPatch.ShouldFailPlayer[i] = false;
+            AccuracyState.Reset();
+            IsValidHitPatch.ShouldFailPlayer = false;
             CounterDisplay.Refresh();
-        }
-    }
-
-    [HarmonyPatch(typeof(scrMistakesManager), "MarkCheckpoint")]
-    public static class CheckpointMarkPatch
-    {
-        static void Postfix()
-        {
-            AccuracyState.MarkAllCheckpoints();
-        }
-    }
-
-    [HarmonyPatch(typeof(scrMistakesManager), "RevertToLastCheckpoint")]
-    public static class CheckpointRestorePatch
-    {
-        static void Postfix()
-        {
-            AccuracyState.RevertAllToCheckpoint();
         }
     }
 
@@ -555,67 +449,48 @@ namespace XPerfect
     {
         static void Prefix()
         {
-            DetailedResultsXPerfectPatch.ResetCache();
         }
     }
 
     [HarmonyPatch(typeof(DetailedResults), "ShowForPlayer")]
-    public static class DetailedResultsXPerfectPatch
+    public static class ResultsTextPatch
     {
-        private static string _baseCongratsText = null;
-        private static string _purePerfectText = null;
-
-        public static void ResetCache()
+        static void Postfix(DetailedResults __instance)
         {
-            _baseCongratsText = null;
-            _purePerfectText = null;
-        }
-
-        static void Postfix(DetailedResults __instance, int playerIndex)
-        {
-            if (!Main.Enabled) return;
-            if (__instance == null || __instance.textComponent == null) return;
-
             var ctrl = scrController.instance;
+            if (ctrl == null) return;
 
-            // Cache texts on first call
-            if (_baseCongratsText == null && ctrl?.txtCongrats != null)
+            if (!Main.Enabled) return;
+            if (__instance == null) return;
+
+            bool isPureXPerfectRun =
+                !ctrl.startedFromCheckpoint &&
+                AccuracyState.XPerfectCount > 0 &&
+                AccuracyState.PlusPerfectCount == 0 &&
+                AccuracyState.MinusPerfectCount == 0;
+
+            if (isPureXPerfectRun &&
+                string.IsNullOrEmpty(ctrl.customTxtPurePerfect) &&
+                ctrl.mistakesManager.IsAllPurePerfect() &&
+                ctrl.txtCongrats != null)
             {
-                _baseCongratsText = ctrl.txtCongrats.text;
-                _purePerfectText = string.IsNullOrEmpty(ctrl.customTxtPurePerfect)
-                    ? RDString.Get("status.allPurePerfect")
-                    : ctrl.customTxtPurePerfect;
+                string shown = ctrl.txtCongrats.text;
+
+                if (!string.IsNullOrEmpty(shown) && !shown.StartsWith("X"))
+                    ctrl.txtCongrats.text = "X" + shown;
             }
 
-            // Per-player congrats text
-            // When pure XPerfect: show "X" + pure perfect text (e.g. "XPerfect!")
-            // Otherwise: show standard congrats text
-            bool startedFromCheckpoint = ctrl != null && ctrl.startedFromCheckpoint;
-            bool playerPurePerfect = playerIndex >= 0 && playerIndex < scrMistakesManager.marginTrackers.Length
-                && scrMistakesManager.marginTrackers[playerIndex].IsAllPurePerfect();
-            bool playerXPerfect = AccuracyState.GetPlayerXPerfectCount(playerIndex) > 0
-                && AccuracyState.GetPlayerPlusPerfectCount(playerIndex) == 0
-                && AccuracyState.GetPlayerMinusPerfectCount(playerIndex) == 0;
-
-            if (ctrl?.txtCongrats != null)
-            {
-                if (!startedFromCheckpoint && playerPurePerfect && _purePerfectText != null)
-                    ctrl.txtCongrats.text = playerXPerfect ? "X" + _purePerfectText : _purePerfectText;
-                else if (_baseCongratsText != null)
-                    ctrl.txtCongrats.text = _baseCongratsText;
-            }
-
-            // Append XPerfect detail to results text
-            int plus = AccuracyState.GetPlayerPlusPerfectCount(playerIndex);
-            int x = AccuracyState.GetPlayerXPerfectCount(playerIndex);
-            int minus = AccuracyState.GetPlayerMinusPerfectCount(playerIndex);
-
-            if (plus == 0 && x == 0 && minus == 0) return;
+            if (__instance == null || __instance.textComponent == null) return;
 
             string text = __instance.textComponent.text;
             if (string.IsNullOrEmpty(text)) return;
 
-            string detail = $" <color=#60FF4E>[+{plus}/</color><color=#4DCCFF>{x}</color><color=#60FF4E>/-{minus}]</color>";
+            string detail =
+                $" <color=#{XPerfectColors.PlusMinusHex}>[+{AccuracyState.PlusPerfectCount}/</color>" +
+                $"<color=#{XPerfectColors.XPerfectHex}>{AccuracyState.XPerfectCount}</color>" +
+                $"<color=#{XPerfectColors.PlusMinusHex}>/-{AccuracyState.MinusPerfectCount}]</color>";
+
+            if (text.Contains(detail)) return;
 
             const string separator = "     ";
             int firstNewline = text.IndexOf('\n');
@@ -632,6 +507,26 @@ namespace XPerfect
             {
                 __instance.textComponent.text = text + detail;
             }
+        }
+    }
+
+    [HarmonyPatch(typeof(scrMistakesManager), "MarkCheckpoint")]
+    public static class CheckpointMarkPatch
+    {
+        static void Postfix()
+        {
+            AccuracyState.MarkCheckpoint();
+        }
+    }
+
+    [HarmonyPatch(typeof(scrMistakesManager), "RevertToLastCheckpoint")]
+    public static class CheckpointRestorePatch
+    {
+        static void Postfix()
+        {
+            AccuracyState.RevertToCheckpoint();
+
+            CounterDisplay.Refresh();
         }
     }
 }
