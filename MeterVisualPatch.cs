@@ -136,15 +136,12 @@ namespace XPerfect
                 if (normalizedAngle < -normalizedPureBoundary || normalizedAngle > normalizedPureBoundary)
                     return;
 
-                const float xCompress = 0.75f;
-
                 double xPerfectMeterBoundary = AccuracyMath.GetMeterXPerfectBoundaryDeg(
                     bpmTimesSpeed, conductorPitch, countedBoundaryDeg, marginScale);
 
                 if (Math.Abs(normalizedAngle) <= xPerfectMeterBoundary)
                 {
-                    float finalAngle = normalizedAngle * xCompress;
-                    ApplyTickAngle(tickImage, meterShape, finalAngle);
+                    ApplyTickAngle(tickImage, meterShape, normalizedAngle);
                 }
             }
             catch (Exception ex)
