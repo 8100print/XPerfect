@@ -51,9 +51,21 @@ namespace XPerfect
         private static bool OnToggle(UnityModManager.ModEntry modEntry, bool value)
         {
             Enabled = value;
+            try { UnityModManager.Logger.Log($"[XPerfect] OnToggle called. value={value}"); } catch {}
+            CompetitiveModePrefs.runtimeDisabled = !value;
             AccuracyState.Reset();
-            MeterVisualPatch.RefreshAllMeters();
-            CounterDisplay.Refresh();
+            if (!value)
+            {
+                try { CounterDisplay.Destroy(); } catch { }
+                try { MeterVisualPatch.RefreshAllMeters(); } catch { }
+            }
+            else
+            {
+                try { CounterDisplay.Create(); } catch { }
+                try { CounterDisplay.ApplyFont(); } catch { }
+                try { CounterDisplay.Refresh(); } catch { }
+                try { MeterVisualPatch.RefreshAllMeters(); } catch { }
+            }
             return true;
         }
 
@@ -62,6 +74,7 @@ namespace XPerfect
             try
             {
                 Enabled = false;
+                try { CompetitiveModePrefs.runtimeDisabled = false; } catch { }
 
                 MeterVisualPatch.RefreshAllMeters();
 
@@ -85,8 +98,6 @@ namespace XPerfect
 
         private static void OnGUI(UnityModManager.ModEntry modEntry)
         {
-            Settings.HideXPerfect = GUILayout.Toggle(Settings.HideXPerfect, "Hide XPerfect");
-            Settings.HidePlusMinus = GUILayout.Toggle(Settings.HidePlusMinus, "Hide +Perfect / -Perfect");
             Settings.XPerfectOnly = GUILayout.Toggle(Settings.XPerfectOnly, "XPerfect Only");
             bool prevShow = Settings.ShowCounter;
             Settings.ShowCounter = GUILayout.Toggle(Settings.ShowCounter, "Show Counter");
@@ -183,8 +194,6 @@ namespace XPerfect
 
     public class XPerfectSettings : UnityModManager.ModSettings
     {
-        public bool HideXPerfect = false;
-        public bool HidePlusMinus = false;
         public bool XPerfectOnly = false;
 
         public bool ShowCounter = false;
