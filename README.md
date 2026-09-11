@@ -1,12 +1,9 @@
-### 세부판정을 추가합니다
-- #### X정확
-  > 기본: ±15°
-  >
-  > 최소: ±16.67ms
+### XPerfect를 보조합니다
+-  XPerfect 판정선 및 카운터
+-  XPerfect only 판정제한
 
-### Adds detailed judgments
-- #### XPerfect
-  > Base: ±15°
-  >
-  > Minimum: ±16.67ms
-<img width="400" height="200" alt="XStraightMeter" src="https://github.com/user-attachments/assets/c4ecbae7-a858-4c7e-b3af-60a14424bae0" />
+### XPerfect Enhancement
+- XPerfect Hit Error Meter and counter
+- XPerfect only judgment restriction
+<img width="400" height="72" alt="XStraightMeter" src="https://github.com/user-attachments/assets/3b8fc0ca-ba92-40e9-b540-8278616e6e8b" />
+
